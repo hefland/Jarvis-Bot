@@ -1,0 +1,28 @@
+# Installed automatically by install.sh -- you don't need to run this yourself.
+numpy
+scipy
+sounddevice
+soundfile
+webrtcvad-wheels
+faster-whisper>=1.1
+onnxruntime
+httpx
+fastapi
+uvicorn
+sympy
+pint
+dateparser
+psutil
+yt-dlp
+# dictionary + vocabulary level
+nltk
+wordfreq
+# Google Calendar (optional feature)
+google-auth
+google-auth-oauthlib
+# needed by openwakeword (which install.sh adds separately)
+tqdm
+scikit-learn
+requests
+# for the automatic tests
+pytest

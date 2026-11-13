@@ -1,0 +1,560 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jarvis</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --text: #1b1f24; --muted: #5f6b7a; --border: #dde2e8;
+    --accent: #2563eb; --accent-text: #ffffff; --ok: #15803d; --warn: #b45309; --bad: #b91c1c;
+    --input: #ffffff; --me: #e8efff; --bot: #f1f3f5;
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f1216; --panel: #171b21; --text: #e6e9ee; --muted: #94a0b0; --border: #2a313b;
+    --accent: #4f8cff; --accent-text: #0b0e12; --ok: #4ade80; --warn: #fbbf24; --bad: #f87171;
+    --input: #0f1318; --me: #1d2a44; --bot: #1f252d;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root[data-theme="system"] {
+      --bg: #0f1216; --panel: #171b21; --text: #e6e9ee; --muted: #94a0b0; --border: #2a313b;
+      --accent: #4f8cff; --accent-text: #0b0e12; --ok: #4ade80; --warn: #fbbf24; --bad: #f87171;
+      --input: #0f1318; --me: #1d2a44; --bot: #1f252d;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Ubuntu, sans-serif; }
+  header { display: flex; align-items: center; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--border);
+           background: var(--panel); position: sticky; top: 0; z-index: 2; flex-wrap: wrap; }
+  header h1 { font-size: 20px; margin: 0; letter-spacing: .5px; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--muted); flex: none; }
+  .dot.idle { background: var(--ok); } .dot.listening { background: var(--accent); animation: pulse 1s infinite; }
+  .dot.thinking, .dot.speaking { background: var(--warn); } .dot.error { background: var(--bad); }
+  @keyframes pulse { 50% { opacity: .35; } }
+  #statusText { color: var(--muted); flex: 1; min-width: 180px; }
+  button { font: inherit; border: 1px solid var(--border); background: var(--panel); color: var(--text);
+           padding: 8px 14px; border-radius: 8px; cursor: pointer; }
+  button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 600; }
+  button:hover { filter: brightness(1.08); }
+  main { display: grid; grid-template-columns: 220px 1fr; gap: 0; min-height: calc(100vh - 60px); }
+  nav { border-right: 1px solid var(--border); padding: 12px; background: var(--panel); }
+  nav a { display: block; padding: 9px 12px; border-radius: 8px; color: var(--text); text-decoration: none; cursor: pointer; }
+  nav a.active { background: var(--accent); color: var(--accent-text); }
+  section.page { padding: 22px 28px; max-width: 860px; display: none; }
+  section.page.active { display: block; }
+  h2 { margin: 0 0 16px; font-size: 20px; }
+  .field { margin-bottom: 18px; }
+  .field label { display: block; font-weight: 600; margin-bottom: 5px; }
+  .field .help { color: var(--muted); font-size: 13px; margin-top: 4px; }
+  input[type=text], input[type=password], input[type=number], select, textarea {
+    width: 100%; padding: 9px 11px; border: 1px solid var(--border); border-radius: 8px;
+    background: var(--input); color: var(--text); font: inherit; }
+  textarea { min-height: 110px; resize: vertical; }
+  .row { display: flex; gap: 8px; } .row > input, .row > select { flex: 1; }
+  .switch { display: flex; align-items: center; gap: 10px; }
+  .switch input { width: 20px; height: 20px; }
+  .savebar { position: sticky; bottom: 0; padding: 12px 0; background: var(--bg); display: flex; gap: 10px; align-items: center; }
+  #saveMsg { color: var(--muted); }
+  #chatLog { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px;
+             height: 52vh; overflow-y: auto; margin-bottom: 12px; }
+  .msg { padding: 9px 12px; border-radius: 10px; margin: 6px 0; max-width: 85%; white-space: pre-wrap; }
+  .msg.me { background: var(--me); margin-left: auto; } .msg.bot { background: var(--bot); }
+  #log { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 12px;
+         font: 12.5px/1.5 ui-monospace, Menlo, Consolas, monospace; height: 60vh; overflow-y: auto; white-space: pre-wrap; }
+  nav .group { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); padding: 14px 12px 4px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+  .card h3 { margin: 0 0 8px; font-size: 15px; }
+  .item { display: flex; gap: 8px; align-items: flex-start; padding: 6px 0; border-top: 1px solid var(--border); }
+  .item:first-of-type { border-top: 0; }
+  .item .grow { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  .x { border: 0; background: transparent; color: var(--muted); padding: 0 6px; font-size: 16px; }
+  .x:hover { color: var(--bad); }
+  .pill { display: inline-block; padding: 1px 8px; border-radius: 99px; font-size: 12px; background: var(--bot); color: var(--muted); }
+  .pill.on { background: var(--bad); color: #fff; } .pill.ok { background: var(--ok); color: #0b0e12; }
+  .big { font-size: 28px; font-weight: 700; }
+  audio { width: 100%; height: 34px; margin-top: 4px; }
+  table { width: 100%; border-collapse: collapse; } td, th { text-align: left; padding: 6px 4px; border-top: 1px solid var(--border); vertical-align: top; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-bottom: 12px; }
+  .muted { color: var(--muted); }
+  @media (max-width: 720px) {
+    main { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+    nav { display: flex; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--border); }
+    nav a { white-space: nowrap; }
+    nav { align-items: center; }
+    nav .group { padding: 0 8px; white-space: nowrap; }
+    section.page { padding: 16px; }
+    #chatLog { height: 42vh; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <span class="dot" id="dot"></span>
+  <h1 id="title">Jarvis</h1>
+  <span id="statusText">Connecting…</span>
+  <button class="primary" onclick="api('/api/talk',{})" title="Same as saying the wake word">🎤 Talk</button>
+  <button onclick="api('/api/stop',{})" title="Stop the voice (and any ringing alarm)">Stop talking</button>
+  <button onclick="api('/api/cancel',{})" title="Same as saying the cancel phrase: stop listening, talking, music, videos, alarms" style="border-color:var(--bad); color:var(--bad); font-weight:600">✋ Stop everything</button>
+</header>
+<main>
+  <nav id="nav"></nav>
+  <div id="pages">
+    <section class="page" id="page-chat">
+      <h2>Chat</h2>
+      <div class="row" style="margin-bottom:12px; align-items:center; flex-wrap:wrap">
+        <button class="primary" id="micBtn" onclick="toggleMic()" style="font-size:17px; padding:12px 20px">🎙️ Tap to talk</button>
+        <span id="micNote" class="muted" style="flex:1; min-width:180px">Talk from this device (great on your phone through Tailscale), or type below.</span>
+      </div>
+      <div id="chatLog"></div>
+      <div class="row">
+        <input type="text" id="chatInput" placeholder="Ask anything… e.g. what's 17% of 2,350?" autocomplete="off">
+        <button class="primary" onclick="sendChat()">Send</button>
+      </div>
+      <div class="row" style="margin-top:10px; align-items:center">
+        <label class="switch"><input type="checkbox" id="speakReplies"> Also speak replies on the home speakers</label>
+        <span style="flex:1"></span>
+        <button onclick="resetChat()">Start a new conversation</button>
+      </div>
+    </section>
+    <section class="page" id="page-dashboard" style="max-width:1100px">
+      <h2>Dashboard</h2>
+      <div class="row" style="margin-bottom:12px; flex-wrap:wrap">
+        <span id="dashNow" class="muted" style="flex:1"></span>
+        <button onclick="musicCmd('play')">🎵 Shuffle music</button>
+        <button onclick="musicCmd('sleep_sound')">🌧️ Sleep sound</button>
+        <button onclick="musicCmd('stop')">⏹ Stop music</button>
+      </div>
+      <div class="grid" id="dashGrid"></div>
+    </section>
+    <section class="page" id="page-security" style="max-width:1000px">
+      <h2>Security</h2>
+      <div class="card">
+        <div class="row" style="align-items:center; flex-wrap:wrap">
+          <div style="flex:1"><div class="muted">Away mode</div><div class="big" id="awayState">…</div>
+            <div class="muted" id="awayNote"></div></div>
+          <button class="primary" id="awayBtn" onclick="toggleAway()">…</button>
+          <button onclick="notifyTest()">📱 Send a test notification</button>
+        </div>
+        <p class="muted" style="margin-bottom:0">While away mode is on, Jarvis stays silent and saves short recordings when it hears voices or
+          nearby sounds, then alerts your phone. Say the wake word + your disarm phrase (default "I'm home") to turn it off.
+          Note: recording other people without their consent is restricted in some places -- check your local law.</p>
+      </div>
+      <div class="card"><h3>Recordings</h3><div id="clips" class="muted">…</div>
+        <div style="margin-top:8px"><button onclick="if(confirm('Delete ALL recordings?')) del('security', 0).then(loadSecurity)">Delete all recordings</button></div></div>
+      <div class="card"><h3>Network alerts (since Jarvis started)</h3><div id="netAlerts" class="muted">…</div></div>
+      <div class="card"><h3>Devices seen on your Wi-Fi</h3><div id="devices" class="muted">…</div></div>
+    </section>
+    <section class="page" id="page-vocab" style="max-width:1000px">
+      <h2>Vocabulary</h2>
+      <div class="grid">
+        <div class="card"><div class="muted">Your vocabulary level</div><div class="big" id="vLevel">…</div><div class="muted" id="vLevelNote"></div></div>
+        <div class="card"><div class="muted">Word of the day</div><div class="big" id="vWotd">…</div><div id="vWotdDef" class="muted"></div></div>
+      </div>
+      <div class="card" style="margin-top:12px"><h3>Your words</h3><div id="vWords" class="muted">…</div></div>
+    </section>
+    <section class="page" id="page-history" style="max-width:1000px">
+      <h2>History</h2>
+      <div class="row" style="margin-bottom:12px">
+        <input type="text" id="histQ" placeholder="Search your conversations…" onkeydown="if(event.key==='Enter') loadHistory()">
+        <button onclick="loadHistory()">Search</button>
+        <button onclick="if(confirm('Delete all saved conversations?')) del('history_all', 0).then(loadHistory)">Delete all</button>
+      </div>
+      <div id="histList"></div>
+    </section>
+    <section class="page" id="page-activity">
+      <h2>Activity</h2>
+      <div class="card"><b>Last heard:</b> <span id="lastHeard" class="muted">—</span><br>
+        <b>Last reply:</b> <span id="lastReply" class="muted">—</span></div>
+      <div class="row" style="margin-bottom:8px; align-items:center">
+        <span class="muted" style="flex:1">Newest at the bottom. Selecting text pauses the updates so you can copy.</span>
+        <button onclick="copyLog()">📋 Copy all</button>
+      </div>
+      <div id="log"></div>
+    </section>
+  </div>
+</main>
+<script>
+let schema = [], values = {}, current = 'chat';
+
+async function api(url, body) {
+  const opts = body === undefined ? {} : {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)};
+  const r = await fetch(url, opts);
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.detail || r.statusText);
+  return data;
+}
+
+function el(tag, attrs = {}, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === 'class') e.className = v; else if (k.startsWith('on')) e[k] = v; else e.setAttribute(k, v);
+  }
+  for (const kid of kids) if (kid != null) e.append(kid);
+  return e;
+}
+
+function show(id) {
+  current = id;
+  document.querySelectorAll('.page').forEach(p => p.classList.toggle('active', p.id === 'page-' + id));
+  document.querySelectorAll('nav a').forEach(a => a.classList.toggle('active', a.dataset.id === id));
+  try { localStorage.setItem('jarvisPage', id); } catch (e) {}
+  refreshPage();
+}
+
+function refreshPage() {
+  if (current === 'dashboard') loadDashboard();
+  if (current === 'security') loadSecurity();
+  if (current === 'vocab') loadVocab();
+  if (current === 'history') loadHistory();
+}
+
+const esc = t => String(t ?? '');
+async function del(kind, id) { return api('/api/delete', {kind, id}); }
+function card(title, rows, empty) {
+  const c = el('div', {class: 'card'}, el('h3', {}, title));
+  if (!rows.length) c.append(el('div', {class: 'muted'}, empty || 'Nothing here.'));
+  rows.forEach(r => c.append(r));
+  return c;
+}
+function line(main, sub, onDelete) {
+  return el('div', {class: 'item'},
+    el('div', {class: 'grow'}, el('div', {}, esc(main)), sub ? el('div', {class: 'muted'}, esc(sub)) : null),
+    onDelete ? el('button', {class: 'x', title: 'Delete', onclick: async () => { await onDelete(); refreshPage(); }}, '✕') : null);
+}
+
+async function loadDashboard() {
+  const d = await api('/api/dashboard');
+  const g = document.getElementById('dashGrid'); g.innerHTML = '';
+  let now = [];
+  if (d.ringing) now.push('⏰ Ringing: ' + d.ringing);
+  if (d.playing && d.playing.playing) now.push('🎵 ' + (d.playing.title || 'playing') + (d.playing.paused ? ' (paused)' : ''));
+  if (d.away) now.push('🛡️ Away mode is ON');
+  now.push('Google Calendar: ' + d.google);
+  document.getElementById('dashNow').textContent = now.join('  ·  ');
+  g.append(card('⏰ Alarms', d.alarms.map(a => line(`${a.when} — ${a.label}`, a.repeats, () => del('alarm', a.id))), 'No alarms. Try "set an alarm for 7am on weekdays".'));
+  g.append(card('⏳ Timers', d.timers.map(t => line(`${t.name}`, `${t.left} left`, () => del('timer', t.id))), 'No timers running.'));
+  g.append(card('🔔 Reminders', d.reminders.map(r => line(r.text, `${r.when} · ${r.repeats}${r.awaiting ? ' · waiting for you to confirm' : ''}`, () => del('reminder', r.id))), 'No reminders.'));
+  g.append(card('📅 Next 7 days', d.events.map(e => line(e.title, `${e.when}${e.source === 'google' ? ' · Google' : ''}`,
+    e.source === 'jarvis' ? () => del('event', e.id) : e.source === 'google' ? () => del('google_event', e.id) : null)), 'Nothing scheduled.'));
+  const listNames = Object.keys(d.lists);
+  g.append(card('🛒 Lists', listNames.length ? listNames.flatMap(n => [el('div', {class: 'muted', style: 'margin-top:6px'}, n.toUpperCase())].concat(d.lists[n].map(i => line(i.item, '', () => del('list_item', i.id))))) : [], 'Lists are empty. Try "add milk to my shopping list".'));
+  g.append(card('🧠 Things I remember', d.memories.map(m => line(m.text, '', () => del('memory', m.id))), 'Try "remember that the spare key is in the blue drawer".'));
+}
+
+async function musicCmd(action) {
+  try { const r = await api('/api/music', {action}); if (r.error) alert(r.error); } catch (e) { alert(e.message); }
+  loadDashboard();
+}
+
+async function loadSecurity() {
+  const d = await api('/api/security');
+  document.getElementById('awayState').textContent = d.away ? 'ON' : 'Off';
+  document.getElementById('awayState').style.color = d.away ? 'var(--bad)' : 'var(--ok)';
+  document.getElementById('awayBtn').textContent = d.away ? "I'm home — turn off" : "I'm leaving — turn on";
+  document.getElementById('awayNote').textContent = (d.scheduled ? 'Your away schedule is active right now. ' : '') + (d.phone ? 'Phone alerts: on.' : 'Phone alerts are off — set them up in Settings › Phone notifications.');
+  const clips = document.getElementById('clips'); clips.innerHTML = '';
+  if (!d.clips.length) clips.textContent = 'No recordings.';
+  d.clips.forEach(c => {
+    const row = el('div', {class: 'item'}, el('div', {class: 'grow'},
+      el('div', {}, `${c.when} — ${c.kind === 'voices' ? '🗣️ voices' : '⌨️ sounds'}, ${c.seconds}s`),
+      c.transcript ? el('div', {class: 'muted'}, '"' + c.transcript + '"') : null,
+      el('audio', {controls: '', preload: 'none', src: '/api/security/clip/' + c.id})),
+      el('button', {class: 'x', title: 'Delete', onclick: async () => { await del('security', c.id); loadSecurity(); }}, '✕'));
+    clips.append(row);
+  });
+  const na = document.getElementById('netAlerts'); na.innerHTML = '';
+  if (!d.network.length) na.textContent = 'None.';
+  d.network.forEach(n => na.append(line(n.message, n.when)));
+  const dv = document.getElementById('devices'); dv.innerHTML = '';
+  if (!d.devices.length) dv.textContent = 'Not scanned yet (runs every 10 minutes if turned on).';
+  else {
+    const t = el('table', {}, el('tr', {}, el('th', {}, 'Address'), el('th', {}, 'Name'), el('th', {}, 'Device ID (MAC)')));
+    d.devices.forEach(x => t.append(el('tr', {}, el('td', {}, x.ip || ''), el('td', {}, x.name || '—'), el('td', {}, x.mac))));
+    dv.append(t);
+  }
+}
+
+async function toggleAway() {
+  const on = document.getElementById('awayState').textContent !== 'ON';
+  const r = await api('/api/away', {on});
+  if (!on && r.recordings_while_away) alert(`Welcome back! ${r.recordings_while_away} recording(s) while you were away.`);
+  loadSecurity();
+}
+
+async function notifyTest() {
+  try { await api('/api/notify-test', {}); alert('Sent! Check your phone.'); } catch (e) { alert(e.message); }
+}
+
+async function connectGoogle() {
+  try { const r = await api('/api/google/connect', {}); alert(r.note); } catch (e) { alert(e.message); }
+}
+
+async function findGovee() {
+  const box = document.getElementById('goveeFound');
+  box.style.display = ''; box.textContent = 'Searching your Wi-Fi for Govee lights…';
+  try {
+    const r = await api('/api/govee/discover', {});
+    box.innerHTML = '';
+    const lights = r.devices.filter(d => d.address);
+    box.append(el('h3', {}, `Found ${lights.length} light(s)`));
+    if (!lights.length) {
+      box.append(el('div', {class: 'muted'}, 'None found. Check: (1) In the Govee Home app, tap the light → ⚙️ → turn on "LAN Control". ' +
+        'If the switch is missing, unplug the light, plug it back in and wait 30 minutes. (2) This PC and the light are on the same router. ' +
+        '(3) If you turned on the Linux Mint firewall, run in Terminal: sudo ufw allow 4002/udp — then click Find again.'));
+    }
+    r.devices.filter(d => !d.address).forEach(d => box.append(el('div', {class: 'muted'}, d.name)));
+    lights.forEach(d => {
+      const nameIn = el('input', {type: 'text', placeholder: 'Name it, e.g. TV strip'});
+      nameIn.value = d.saved_as || '';
+      const msg = el('span', {class: 'muted'});
+      const add = el('button', {class: 'primary', onclick: async () => {
+        try { await api('/api/govee/add', {name: nameIn.value, address: d.address}); msg.textContent = '✔ Saved';
+              values = await api('/api/settings'); const ta = document.getElementById('smarthome.govee_names'); if (ta) ta.value = values.smarthome.govee_names;
+              const mode = document.getElementById('smarthome.govee_mode'); if (mode) mode.value = values.smarthome.govee_mode; }
+        catch (e) { msg.textContent = '✖ ' + e.message; } }}, d.saved_as ? 'Rename' : 'Add');
+      const blink = d.how === 'LAN' ? el('button', {onclick: async () => {
+        msg.textContent = 'Blinking…';
+        const res = await api('/api/govee/blink', {address: d.address});
+        msg.textContent = res.answered ? 'Did that one blink?' : 'Sent — no status reply, but it may still have blinked.'; }}, '💡 Blink') : null;
+      box.append(el('div', {class: 'item', style: 'flex-wrap:wrap'},
+        el('div', {class: 'grow'}, el('div', {}, `${d.name} — ${d.address}`), el('div', {class: 'muted'}, d.saved_as ? `Saved as "${d.saved_as}"` : `found via ${d.how}`)),
+        el('div', {class: 'row', style: 'flex:1; min-width:260px'}, nameIn, add, blink), msg));
+    });
+  } catch (e) { box.textContent = e.message; }
+}
+
+async function loadVocab() {
+  const d = await api('/api/vocab');
+  document.getElementById('vLevel').textContent = d.level.level ? `${d.level.level} / 10` : '—';
+  document.getElementById('vLevelNote').textContent = (d.level.description ? d.level.description + ' · ' : '') + (d.level.note || `based on ${d.level.words_heard} different words you've used`);
+  document.getElementById('vWotd').textContent = d.word_of_the_day ? d.word_of_the_day.word : '—';
+  document.getElementById('vWotdDef').textContent = d.word_of_the_day ? d.word_of_the_day.definition : '';
+  const w = document.getElementById('vWords'); w.innerHTML = '';
+  if (!d.words.length) w.textContent = 'No words yet. Ask "what does serendipity mean?" and it will show up here.';
+  d.words.forEach(x => w.append(line(`${x.word} — ${x.definition}`, `${x.source.replace(/_/g, ' ')} · right ${x.correct}× · missed ${x.wrong}× · next review ${x.next_review}`, () => del('vocab', x.word))));
+}
+
+async function loadHistory() {
+  const q = document.getElementById('histQ').value;
+  const d = await api('/api/history?q=' + encodeURIComponent(q));
+  const h = document.getElementById('histList'); h.innerHTML = '';
+  if (!d.items.length) h.append(el('div', {class: 'muted'}, 'Nothing yet.'));
+  d.items.forEach(i => h.append(el('div', {class: 'card'},
+    el('div', {class: 'muted'}, `${i.when} · ${i.source}`),
+    el('div', {class: 'msg me', style: 'margin-left:0'}, i.user), el('div', {class: 'msg bot'}, i.reply))));
+}
+
+function applyTheme(t) { document.documentElement.dataset.theme = t || 'dark'; }
+
+function buildField(sec, f) {
+  const id = `${sec}.${f.key}`;
+  const val = values[sec][f.key];
+  let input;
+  if (f.type === 'bool') {
+    input = el('input', {type: 'checkbox', id});
+    input.checked = !!val;
+    return el('div', {class: 'field'}, el('label', {class: 'switch'}, input, f.label),
+              f.help ? el('div', {class: 'help'}, f.help) : null);
+  }
+  if (f.type === 'select') {
+    input = el('select', {id});
+    for (const o of f.options) { const opt = el('option', {value: o}, o); if (o === String(val)) opt.selected = true; input.append(opt); }
+    if (id === 'general.theme') input.onchange = () => applyTheme(input.value);
+  } else if (f.type === 'textarea') {
+    input = el('textarea', {id}); input.value = val;
+  } else {
+    input = el('input', {type: f.type === 'password' ? 'password' : (f.type === 'number' ? 'number' : 'text'), id});
+    if (f.type === 'number') { if (f.min != null) input.min = f.min; if (f.max != null) input.max = f.max; if (f.step != null) input.step = f.step; }
+    input.value = val;
+  }
+  let control = input;
+  if (f.extra) {
+    const label = f.extra === 'models' ? 'Load models' : 'Load devices';
+    const picker = el('select', {style: 'display:none'});
+    picker.onchange = () => { if (picker.value !== '__') input.value = picker.value === '__default' ? '' : picker.value; };
+    const btn = el('button', {type: 'button', onclick: async () => {
+      btn.textContent = 'Loading…';
+      try {
+        const r = await api('/api/options/' + f.extra);
+        if (r.error) { alert('Could not load the list: ' + r.error); btn.textContent = label; return; }
+        picker.innerHTML = '';
+        picker.append(el('option', {value: '__'}, `Pick one (${r.options.length} found)…`));
+        if (f.extra !== 'models') picker.append(el('option', {value: '__default'}, '(system default)'));
+        r.options.forEach(o => picker.append(el('option', {value: o}, o)));
+        picker.style.display = '';
+        btn.textContent = label;
+      } catch (e) { btn.textContent = label; alert(e.message); }
+    }}, label);
+    control = el('div', {}, el('div', {class: 'row'}, input, btn), el('div', {style: 'margin-top:6px'}, picker));
+  }
+  return el('div', {class: 'field'}, el('label', {for: id}, f.label), control,
+            f.help ? el('div', {class: 'help'}, f.help) : null);
+}
+
+function buildPages() {
+  const nav = document.getElementById('nav'), pages = document.getElementById('pages');
+  nav.innerHTML = '';
+  const add = (id, title) => { const a = el('a', {onclick: () => show(id)}, title); a.dataset.id = id; nav.append(a); };
+  add('chat', '💬 Chat');
+  add('dashboard', '📋 Dashboard');
+  add('security', '🛡️ Security');
+  add('vocab', '📚 Vocabulary');
+  add('history', '🕘 History');
+  add('activity', '📜 Activity');
+  nav.append(el('div', {class: 'group'}, 'Settings'));
+  document.querySelectorAll('.page.settings').forEach(p => p.remove());
+  for (const sec of schema) {
+    add(sec.id, '⚙️ ' + sec.title);
+    const page = el('section', {class: 'page settings', id: 'page-' + sec.id}, el('h2', {}, sec.title));
+    for (const f of sec.fields) page.append(buildField(sec.id, f));
+    const extras = {
+      tts: ['🔊 Save & test voice', async () => { await saveSection(sec); api('/api/test-voice', {}); }],
+      phone: ['📱 Save & send test', async () => { await saveSection(sec); notifyTest(); }],
+      smarthome: ['🔎 Find Govee lights', findGovee],
+      reminders: ['🔗 Save & connect Google', async () => { await saveSection(sec); connectGoogle(); }],
+    };
+    const extra = extras[sec.id] ? el('button', {type: 'button', onclick: extras[sec.id][1]}, extras[sec.id][0]) : null;
+    page.append(el('div', {class: 'savebar'}, el('button', {class: 'primary', onclick: () => saveSection(sec)}, 'Save'), extra, el('span', {id: 'saveMsg-' + sec.id, class: 'muted'})));
+    if (sec.id === 'smarthome') page.append(el('div', {id: 'goveeFound', class: 'card', style: 'display:none'}));
+    pages.append(page);
+  }
+}
+
+async function saveSection(sec) {
+  const changes = {};
+  for (const f of sec.fields) {
+    const e = document.getElementById(`${sec.id}.${f.key}`);
+    let v = f.type === 'bool' ? e.checked : e.value;
+    if (f.type === 'number') v = Number(v);
+    changes[f.key] = v;
+  }
+  const msg = document.getElementById('saveMsg-' + sec.id);
+  try {
+    const r = await api('/api/settings', {[sec.id]: changes});
+    values = await api('/api/settings');
+    if (sec.id === 'general') { document.getElementById('title').textContent = values.general.assistant_name || 'Jarvis'; }
+    msg.textContent = r.changed.length ? '✔ Saved.' + (r.app_restart_needed ? ' Restart Jarvis for this to take effect.' : '') : 'No changes.';
+  } catch (e) { msg.textContent = '✖ ' + e.message; }
+  setTimeout(() => msg.textContent = '', 6000);
+}
+
+function addMsg(text, who) {
+  const log = document.getElementById('chatLog');
+  const m = el('div', {class: 'msg ' + who}, text);
+  log.append(m); log.scrollTop = log.scrollHeight;
+  return m;
+}
+
+async function sendChat() {
+  const input = document.getElementById('chatInput');
+  const text = input.value.trim(); if (!text) return;
+  input.value = '';
+  addMsg(text, 'me');
+  const pending = addMsg('…', 'bot');
+  try {
+    const r = await api('/api/chat', {text, speak: document.getElementById('speakReplies').checked});
+    pending.textContent = r.reply;
+  } catch (e) { pending.textContent = 'Error: ' + e.message; }
+}
+
+let recorder = null, recChunks = [];
+async function toggleMic() {
+  const btn = document.getElementById('micBtn'), note = document.getElementById('micNote');
+  if (recorder && recorder.state === 'recording') { recorder.stop(); return; }
+  if (!window.isSecureContext || !navigator.mediaDevices) {
+    alert('Your browser only allows the microphone on secure (https) pages. On your phone, open Jarvis through ' +
+          'Tailscale\'s https address (see "Use Jarvis from your phone" in the README).');
+    return;
+  }
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({audio: true}); }
+  catch (e) { alert('Microphone permission was denied: ' + e.message); return; }
+  recChunks = [];
+  recorder = new MediaRecorder(stream);
+  recorder.ondataavailable = e => { if (e.data.size) recChunks.push(e.data); };
+  recorder.onstop = async () => {
+    stream.getTracks().forEach(t => t.stop());
+    btn.textContent = '🎙️ Tap to talk'; note.textContent = 'Thinking…';
+    const blob = new Blob(recChunks, {type: recorder.mimeType || 'audio/webm'});
+    const pending = addMsg('🎙️ …', 'me');
+    try {
+      const r = await fetch('/api/voice', {method: 'POST', body: blob, headers: {'Content-Type': blob.type}});
+      const raw = await r.text();
+      let d;
+      try { d = JSON.parse(raw); } catch (e) { throw new Error(`${r.status} ${raw.slice(0, 160)} (see the Activity tab on the PC)`); }
+      if (!r.ok) throw new Error(d.detail || r.statusText);
+      pending.textContent = '🎙️ ' + (d.heard || '(didn\'t catch that)');
+      if (d.reply) addMsg(d.reply, 'bot');
+      if (d.audio) new Audio('data:audio/wav;base64,' + d.audio).play().catch(() => {});
+      note.textContent = 'Tap to talk again.';
+    } catch (e) { pending.textContent = '🎙️ Error: ' + e.message; note.textContent = ''; }
+  };
+  recorder.start();
+  btn.textContent = '⏹ Tap when done'; note.textContent = 'Listening… tap the button when you finish talking.';
+}
+
+async function resetChat() {
+  await api('/api/reset', {});
+  document.getElementById('chatLog').innerHTML = '';
+  addMsg('New conversation started.', 'bot');
+}
+
+let mouseDown = false;
+document.addEventListener('mousedown', () => { mouseDown = true; });
+document.addEventListener('mouseup', () => { mouseDown = false; });
+
+function selectingIn(box) {
+  // Don't refresh while the user is dragging or has text selected inside the box.
+  const sel = window.getSelection();
+  const hasSel = sel && !sel.isCollapsed && sel.rangeCount && box.contains(sel.getRangeAt(0).commonAncestorContainer);
+  return hasSel || (mouseDown && box.matches(':hover'));
+}
+
+async function copyLog() {
+  const text = document.getElementById('log').textContent;
+  try { await navigator.clipboard.writeText(text); alert('Copied ' + text.split('\n').length + ' lines.'); }
+  catch (e) {
+    const t = el('textarea'); t.value = text; document.body.append(t); t.select();
+    document.execCommand('copy'); t.remove(); alert('Copied.');
+  }
+}
+
+async function pollStatus() {
+  try {
+    const s = await api('/api/status');
+    document.getElementById('dot').className = 'dot ' + s.state;
+    document.getElementById('statusText').textContent = s.message || s.state;
+    document.getElementById('lastHeard').textContent = s.last_heard || '—';
+    document.getElementById('lastReply').textContent = s.last_reply || '—';
+    const log = document.getElementById('log');
+    const text = s.log.join('\n');
+    if (text !== log.textContent && !selectingIn(log)) {
+      const atBottom = log.scrollTop + log.clientHeight >= log.scrollHeight - 20;
+      log.textContent = text;
+      if (atBottom) log.scrollTop = log.scrollHeight;
+    }
+  } catch (e) {
+    document.getElementById('dot').className = 'dot error';
+    document.getElementById('statusText').textContent = 'Jarvis is not running.';
+  }
+}
+
+async function init() {
+  schema = await api('/api/schema');
+  values = await api('/api/settings');
+  applyTheme(values.general.theme);
+  document.getElementById('title').textContent = values.general.assistant_name || 'Jarvis';
+  document.title = values.general.assistant_name || 'Jarvis';
+  buildPages();
+  let start = 'chat';
+  try { start = localStorage.getItem('jarvisPage') || 'chat'; } catch (e) {}
+  show(document.getElementById('page-' + start) ? start : 'chat');
+  document.getElementById('chatInput').addEventListener('keydown', e => { if (e.key === 'Enter') sendChat(); });
+  pollStatus(); setInterval(pollStatus, 1500);
+  setInterval(() => { if (current === 'dashboard') loadDashboard().catch(() => {}); }, 5000);
+}
+init().catch(e => { document.getElementById('statusText').textContent = 'Could not load: ' + e.message; });
+</script>
+</body>
+</html>
